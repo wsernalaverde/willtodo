@@ -60,5 +60,51 @@ namespace willtodo.Functions.Functions
                 Result = todoEntity
             });
         }
+
+        [FunctionName(nameof(UpdateTodo))]
+        public static async Task<IActionResult> UpdateTodo(
+           [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "todo/{id}")] HttpRequest req,
+           [Table("todo", Connection = "AzureWebJobsStorage")] CloudTable todoTable,
+           string id,
+           ILogger log)
+        {
+            log.LogInformation($"Update for todo: {id}, received");
+
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            Todo todo = JsonConvert.DeserializeObject<Todo>(requestBody);
+
+            // validate todo id
+            TableOperation finOperation = TableOperation.Retrieve<TodoEntity>("TODO", id);
+            TableResult findResult = await todoTable.ExecuteAsync(finOperation);
+            if(findResult.Result == null)
+            {
+                return new BadRequestObjectResult(new Responses
+                {
+                    IsSuccess = false,
+                    Message = "Todo not found."
+                });
+            }
+
+            //Update todo
+            TodoEntity todoEntity = (TodoEntity)findResult.Result;
+            todoEntity.IsCompleted = todo.IsCompleted;
+            if (!string.IsNullOrEmpty(todo.TaskDescription))
+            {
+                todoEntity.TaskDescription = todo.TaskDescription;
+            }
+
+            TableOperation addOperation = TableOperation.Replace(todoEntity);
+            await todoTable.ExecuteAsync(addOperation);
+
+            string message = $"Todo: {id}, updated in table";
+            log.LogInformation(message);
+
+            return new OkObjectResult(new Responses
+            {
+                IsSuccess = true,
+                Message = message,
+                Result = todoEntity
+            });
+        }
     }
 }
